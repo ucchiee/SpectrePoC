@@ -1,6 +1,7 @@
-CFLAGS += -std=c99 -O0
+CC      = wllvm
+CFLAGS += -std=c99 -O0 -Xclang -disable-O0-optnone
 
-PROGRAM = spectre.out
+PROGRAM = spectre
 SOURCE  = spectre.c
      
 all: $(PROGRAM)
@@ -18,6 +19,6 @@ CFLAGS += -DGIT_COMMIT_HASH='"$(GIT_COMMIT_HASH)"'
 endif
 endif
      
-$(PROGRAM): $(SOURCE) ; $(CC) $(CFLAGS) -o $(PROGRAM) $(SOURCE)
+$(PROGRAM): $(SOURCE) ; LLVM_COMPILER=clang $(CC) $(CFLAGS) -o $(PROGRAM) $(SOURCE)
      
 clean: ; rm -f $(PROGRAM)

